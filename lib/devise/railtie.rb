@@ -1,5 +1,4 @@
 require 'devise'
-require 'action_controller/railtie'
 require 'rails'
 
 DEVISE_PATH = File.expand_path(File.join(File.dirname(__FILE__), '..', '..'))
@@ -11,6 +10,10 @@ module Devise
     def load_paths
       Dir["#{DEVISE_PATH}/app/{models,controllers,helpers}"]
     end
+    
+    # TODO: 'after' and 'before' hooks appear to be broken
+    # Some initialization can't take place here until this bug is fixed:
+    # - alias_method_chain in rails/routes.rb
 
     initializer "devise.add_to_load_path", :after => :set_autoload_paths do |app|
       load_paths.each do |path|
@@ -49,28 +52,5 @@ module Devise
 
       I18n.load_path.unshift File.expand_path(File.join(File.dirname(__FILE__), 'locales', 'en.yml'))
     end
-    
-    initializer "devise.notify_done", :after => :disable_dependency_loading do |app|
-      puts "=> Completed initialization"
-    end
-    
-    
-    # # Prepare dispatcher callbacks and run 'prepare' callbacks
-    # initializer "action_dispatch.prepare_dispatcher" do |app|
-    #   # TODO: This used to say unless defined?(Dispatcher). Find out why and fix.
-    #   require 'rails/dispatcher'
-    # 
-    #   unless app.config.cache_classes
-    #     # Setup dev mode route reloading
-    #     routes_last_modified = app.routes_changed_at
-    #     reload_routes = lambda do
-    #       unless app.routes_changed_at == routes_last_modified
-    #         routes_last_modified = app.routes_changed_at
-    #         app.reload_routes!
-    #       end
-    #     end
-    #     ActionDispatch::Callbacks.before { |callbacks| reload_routes.call }
-    #   end
-    # end
   end
 end
