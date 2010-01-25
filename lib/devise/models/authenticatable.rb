@@ -104,7 +104,7 @@ module Devise
         #   end
         #
         def find_for_authentication(conditions)
-          find(:first, :conditions => conditions)
+          first(:conditions => conditions)
         end
 
         Devise::Models.config(self, :pepper, :stretches, :encryptor, :authentication_keys)
