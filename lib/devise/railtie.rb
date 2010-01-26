@@ -39,7 +39,7 @@ module Devise
       require 'devise/rails/warden_compat'
     end
     
-    initializer "devise.add_middleware", :before => :build_middleware_stack do |app|
+    initializer "devise.add_middleware", :after => :build_middleware_stack do |app|
       # Adds Warden Manager to Rails middleware stack, configuring default devise
       # strategy and also the failure app.
       app.config.middleware.use Warden::Manager do |config|
@@ -47,8 +47,10 @@ module Devise
       end
     end
 
-    initializer "devise.after_initialize" do |app|
-      require "devise/orm/#{Devise.orm}"
+    initializer "devise.after_initialize", :after => :after_initialize do |app|
+      # TODO: this needs to be done in the user's configuration
+      # until initializer dependencies work properly 
+      #require "devise/orm/#{Devise.orm}"
 
       I18n.load_path.unshift File.expand_path(File.join(File.dirname(__FILE__), 'locales', 'en.yml'))
     end
