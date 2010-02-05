@@ -39,7 +39,7 @@ module Devise
       require 'devise/rails/warden_compat'
     end
     
-    initializer "devise.add_middleware", :after => :build_middleware_stack do |app|
+    initializer "devise.add_middleware", :before => :build_middleware_stack do |app|
       # Adds Warden Manager to Rails middleware stack, configuring default devise
       # strategy and also the failure app.
       app.config.middleware.use Warden::Manager do |config|
