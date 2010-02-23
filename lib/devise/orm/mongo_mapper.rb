@@ -1,38 +1,51 @@
 module Devise
   module Orm
     module MongoMapper
-      module InstanceMethods
-        def save(options={})
-          if options == false
-            super(:validate => false)
-          else
-            super
+      module Hook
+        def devise_modules_hook!
+          extend Schema
+          include Compatibility
+          yield
+          return unless Devise.apply_schema
+          devise_modules.each { |m| send(m) if respond_to?(m, true) }
+        end
+      end
+
+      module Schema
+        include Devise::Schema
+
+        # Tell how to apply schema methods. This automatically converts DateTime
+        # to Time, since MongoMapper does not recognize the former.
+        def apply_schema(name, type, options={})
+          type = Time if type == DateTime
+          key name, type, options
+        end
+      end
+
+      module Compatibility
+        extend ActiveSupport::Concern
+
+        module ClassMethods
+          def find(*args)
+            options = args.extract_options!
+            case args.first
+              when :first
+                first(options)
+              when :all
+                all(options)
+              else
+                super
+            end
           end
         end
-      end
-
-      def self.included_modules_hook(klass, modules)
-        klass.send :extend,  self
-        klass.send :include, InstanceMethods
-        yield
-
-        modules.each do |mod|
-          klass.send(mod) if klass.respond_to?(mod)
-        end
-      end
-
-      include Devise::Schema
-
-      # Tell how to apply schema methods. This automatically converts DateTime
-      # to Time, since MongoMapper does not recognize the former.
-      def apply_schema(name, type, options={})
-        return unless Devise.apply_schema
-        type = Time if type == DateTime
-        key name, type, options
       end
     end
   end
 end
 
-MongoMapper::Document::ClassMethods.send(:include, Devise::Models)
-MongoMapper::EmbeddedDocument::ClassMethods.send(:include, Devise::Models)
+[MongoMapper::Document, MongoMapper::EmbeddedDocument].each do |mod|
+  mod::ClassMethods.class_eval do
+    include Devise::Models
+    include Devise::Orm::MongoMapper::Hook
+  end
+end

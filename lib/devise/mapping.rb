@@ -22,7 +22,7 @@ module Devise
   #   # is the modules included in the class
   #
   class Mapping #:nodoc:
-    attr_reader :name, :as, :path_names, :path_prefix, :route_options
+    attr_reader :name, :as, :path_names, :path_prefix
 
     # Loop through all mappings looking for a map that matches with the requested
     # path (ie /users/sign_in). If a path prefix is given, it's taken into account.
@@ -36,7 +36,10 @@ module Devise
 
     # Find a mapping by a given class. It takes into account single table inheritance as well.
     def self.find_by_class(klass)
-      Devise.mappings.values.find { |m| return m if klass <= m.to }
+      Devise.mappings.each_value do |mapping|
+        return mapping if klass <= mapping.to
+      end
+      nil
     end
 
     # Receives an object and find a scope for it. If a scope cannot be found,
@@ -53,20 +56,14 @@ module Devise
       end
     end
 
-    # Default url options which can be used as prefix.
-    def self.default_url_options
-      {}
-    end
-
     def initialize(name, options) #:nodoc:
       @as    = (options.delete(:as) || name).to_sym
       @klass = (options.delete(:class_name) || name.to_s.classify).to_s
       @name  = (options.delete(:scope) || name.to_s.singularize).to_sym
-      @path_names = options.delete(:path_names) || {}
-      @path_prefix = "/#{options.delete(:path_prefix)}/".squeeze("/")
-      @route_options = options || {}
 
-      setup_path_names
+      @path_prefix = "/#{options.delete(:path_prefix)}/".squeeze("/")
+      @path_names  = Hash.new { |h,k| h[k] = k.to_s }
+      @path_names.merge!(options.delete(:path_names) || {})
     end
 
     # Return modules for the mapping.
@@ -92,23 +89,10 @@ module Devise
       self.path_prefix.count("/")
     end
 
-    # Returns the raw path using the current relative_url_root, path_prefix and as.
-    def raw_path
+    # Returns the raw path using path_prefix and as.
+    def path
       path_prefix + as.to_s
     end
-
-    # Returns the parsed path. If you need meta information in your path_prefix,
-    # you should overwrite this method to use it. The only information supported
-    # by default is I18n.locale.
-    #
-    def parsed_path
-      returning (ActionController::Base.relative_url_root.to_s + raw_path) do |path|
-        self.class.default_url_options.each do |key, value|
-          path.gsub!(key.inspect, value.to_param)
-        end
-      end
-    end
-
 
     # Create magic predicates for verifying what module is activated by this map.
     # Example:
@@ -119,7 +103,7 @@ module Devise
     #
     def self.register(*modules)
       modules.each do |m|
-        class_eval <<-METHOD, __FILE__, __LINE__
+        class_eval <<-METHOD, __FILE__, __LINE__ + 1
           def #{m}?
             self.for.include?(:#{m})
           end
@@ -127,15 +111,5 @@ module Devise
       end
     end
     Devise::Mapping.register *ALL
-
-    private
-
-      # Configure default path names, allowing the user overwrite defaults by
-      # passing a hash in :path_names.
-      def setup_path_names
-        [:sign_in, :sign_out, :password, :confirmation].each do |path_name|
-          @path_names[path_name] ||= path_name.to_s
-        end
-      end
   end
 end

@@ -27,16 +27,15 @@ module Devise
     #    User.find(1).valid_password?('password123')         # returns true/false
     #
     module Authenticatable
-      def self.included(base)
-        base.class_eval do
-          extend ClassMethods
+      extend ActiveSupport::Concern
 
-          attr_reader :password, :old_password
-          attr_accessor :password_confirmation
-        end
+      included do
+        attr_reader :password, :current_password
+        attr_accessor :password_confirmation
       end
 
-      # Regenerates password salt and encrypted password each time password is set.
+      # Regenerates password salt and encrypted password each time password is set,
+      # and then trigger any "after_changed_password"-callbacks.
       def password=(new_password)
         @password = new_password
 
@@ -48,7 +47,13 @@ module Devise
 
       # Verifies whether an incoming_password (ie from sign in) is the user password.
       def valid_password?(incoming_password)
-        password_digest(incoming_password) == encrypted_password
+        password_digest(incoming_password) == self.encrypted_password
+      end
+
+      # Verifies whether an +incoming_authentication_token+ (i.e. from single access URL)
+      # is the user authentication token.
+      def valid_authentication_token?(incoming_auth_token)
+        incoming_auth_token == self.authentication_token
       end
 
       # Checks if a resource is valid upon authentication.
@@ -56,28 +61,44 @@ module Devise
         valid_password?(attributes[:password])
       end
 
-      # Update record attributes when :old_password matches, otherwise returns
-      # error on :old_password.
+      # Set password and password confirmation to nil
+      def clean_up_passwords
+        self.password = self.password_confirmation = nil
+      end
+
+      # Update record attributes when :current_password matches, otherwise returns
+      # error on :current_password. It also automatically rejects :password and
+      # :password_confirmation if they are blank.
       def update_with_password(params={})
-        if valid_password?(params[:old_password])
+        current_password = params.delete(:current_password)
+
+        params.delete(:password)              if params[:password].blank?
+        params.delete(:password_confirmation) if params[:password_confirmation].blank?
+
+        result = if valid_password?(current_password)
           update_attributes(params)
         else
-          self.class.add_error_on(self, :old_password, :invalid, false)
+          self.errors.add(:current_password, current_password.blank? ? :blank : :invalid)
+          self.attributes = params
           false
         end
+
+        clean_up_passwords unless result
+        result
       end
 
       protected
 
         # Digests the password using the configured encryptor.
         def password_digest(password)
-          self.class.encryptor_class.digest(password, self.class.stretches, password_salt, self.class.pepper)
+          self.class.encryptor_class.digest(password, self.class.stretches, self.password_salt, self.class.pepper)
         end
 
       module ClassMethods
+        Devise::Models.config(self, :pepper, :stretches, :encryptor, :authentication_keys)
+
         # Authenticate a user based on configured attribute keys. Returns the
-        # authenticated user if it's valid or nil. Attributes are by default
-        # :email and :password, but the latter is always required.
+        # authenticated user if it's valid or nil.
         def authenticate(attributes={})
           return unless authentication_keys.all? { |k| attributes[k].present? }
           conditions = attributes.slice(*authentication_keys)
@@ -105,8 +126,6 @@ module Devise
         def find_for_authentication(conditions)
           find(:first, :conditions => conditions)
         end
-
-        Devise::Models.config(self, :pepper, :stretches, :encryptor, :authentication_keys)
       end
     end
   end

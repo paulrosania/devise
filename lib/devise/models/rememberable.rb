@@ -30,21 +30,18 @@ module Devise
     #   # lookup the user based on the incoming cookie information
     #   User.serialize_from_cookie(cookie_string)
     module Rememberable
+      extend ActiveSupport::Concern
 
-      def self.included(base)
-        base.class_eval do
-          extend ClassMethods
-
-          # Remember me option available in after_authentication hook.
-          attr_accessor :remember_me
-        end
+      included do
+        # Remember me option available in after_authentication hook.
+        attr_accessor :remember_me
       end
 
       # Generate a new remember token and save the record without validations.
       def remember_me!
         self.remember_token = Devise.friendly_token
         self.remember_created_at = Time.now.utc
-        save(false)
+        save(:validate => false)
       end
 
       # Removes the remember token only if it exists, and save the record
@@ -53,7 +50,7 @@ module Devise
         if remember_token
           self.remember_token = nil
           self.remember_created_at = nil
-          save(false)
+          save(:validate => false)
         end
       end
 

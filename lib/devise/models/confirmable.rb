@@ -29,15 +29,12 @@ module Devise
     #   User.find(1).send_confirmation_instructions # manually send instructions
     #   User.find(1).resend_confirmation! # generates a new token and resent it
     module Confirmable
+      extend ActiveSupport::Concern
       include Devise::Models::Activatable
 
-      def self.included(base)
-        base.class_eval do
-          extend ClassMethods
-
-          before_create :generate_confirmation_token, :if => :confirmation_required?
-          after_create  :send_confirmation_instructions, :if => :confirmation_required?
-        end
+      included do
+        before_create :generate_confirmation_token, :if => :confirmation_required?
+        after_create  :send_confirmation_instructions, :if => :confirmation_required?
       end
 
       # Confirm a user by setting it's confirmed_at to actual time. If the user
@@ -46,7 +43,7 @@ module Devise
         unless_confirmed do
           self.confirmation_token = nil
           self.confirmed_at = Time.now
-          save(false)
+          save(:validate => false)
         end
       end
 
@@ -57,7 +54,7 @@ module Devise
 
       # Send confirmation instructions by email
       def send_confirmation_instructions
-        ::DeviseMailer.deliver_confirmation_instructions(self)
+        ::Devise::Mailer.confirmation_instructions(self).deliver
       end
 
       # Remove confirmation date and send confirmation instructions, to ensure
@@ -66,7 +63,7 @@ module Devise
       def resend_confirmation!
         unless_confirmed do
           generate_confirmation_token
-          save(false)
+          save(:validate => false)
           send_confirmation_instructions
         end
       end
@@ -131,7 +128,7 @@ module Devise
           unless confirmed?
             yield
           else
-            self.class.add_error_on(self, :email, :already_confirmed)
+            self.errors.add(:email, :already_confirmed)
             false
           end
         end

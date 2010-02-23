@@ -1,8 +1,7 @@
 require 'test/test_helper'
 
-class AuthenticationTest < ActionController::IntegrationTest
-
-  test 'home should be accessible without signed in' do
+class AuthenticationSanityTest < ActionController::IntegrationTest
+  test 'home should be accessible without sign in' do
     visit '/'
     assert_response :success
     assert_template 'home/index'
@@ -76,43 +75,6 @@ class AuthenticationTest < ActionController::IntegrationTest
     assert_contain 'Welcome Admin'
   end
 
-  test 'sign in as user should not authenticate if not using proper authentication keys' do
-    swap Devise, :authentication_keys => [:username] do
-      sign_in_as_user
-      assert_not warden.authenticated?(:user)
-    end
-  end
-
-  test 'admin signing in with invalid email should return to sign in form with error message' do
-    sign_in_as_admin do
-      fill_in 'email', :with => 'wrongemail@test.com'
-    end
-
-    assert_contain 'Invalid email or password'
-    assert_not warden.authenticated?(:admin)
-  end
-
-  test 'admin signing in with invalid pasword should return to sign in form with error message' do
-    sign_in_as_admin do
-      fill_in 'password', :with => 'abcdef'
-    end
-
-    assert_contain 'Invalid email or password'
-    assert_not warden.authenticated?(:admin)
-  end
-
-  test 'error message is configurable by resource name' do
-    store_translations :en, :devise => {
-      :sessions => { :admin => { :invalid => "Invalid credentials" } }
-    } do
-      sign_in_as_admin do
-        fill_in 'password', :with => 'abcdef'
-      end
-
-      assert_contain 'Invalid credentials'
-    end
-  end
-
   test 'authenticated admin should not be able to sign as admin again' do
     sign_in_as_admin
     get new_admin_session_path
@@ -143,6 +105,43 @@ class AuthenticationTest < ActionController::IntegrationTest
     get root_path
     assert_not_contain 'Signed out successfully'
   end
+end
+
+class AuthenticationTest < ActionController::IntegrationTest
+  test 'sign in should not authenticate if not using proper authentication keys' do
+    swap Devise, :authentication_keys => [:username] do
+      sign_in_as_user
+      assert_not warden.authenticated?(:user)
+    end
+  end
+
+  test 'sign in with invalid email should return to sign in form with error message' do
+    sign_in_as_admin do
+      fill_in 'email', :with => 'wrongemail@test.com'
+    end
+
+    assert_contain 'Invalid email or password'
+    assert_not warden.authenticated?(:admin)
+  end
+
+  test 'sign in with invalid pasword should return to sign in form with error message' do
+    sign_in_as_admin do
+      fill_in 'password', :with => 'abcdef'
+    end
+
+    assert_contain 'Invalid email or password'
+    assert_not warden.authenticated?(:admin)
+  end
+
+  test 'error message is configurable by resource name' do
+    store_translations :en, :devise => { :sessions => { :admin => { :invalid => "Invalid credentials" } } } do
+      sign_in_as_admin do
+        fill_in 'password', :with => 'abcdef'
+      end
+
+      assert_contain 'Invalid credentials'
+    end
+  end
 
   test 'redirect from warden shows sign in or sign up message' do
     get admins_path
@@ -154,49 +153,82 @@ class AuthenticationTest < ActionController::IntegrationTest
     assert_contain 'You need to sign in or sign up before continuing.'
   end
 
-  test 'return to default url if no other was requested' do
+  test 'redirect to default url if no other was configured' do
     sign_in_as_user
 
     assert_template 'home/index'
-    assert_nil session[:return_to]
+    assert_nil session[:"user.return_to"]
   end
 
-  test 'return to given url after sign in' do
+  test 'redirect to requested url after sign in' do
     get users_path
     assert_redirected_to new_user_session_path(:unauthenticated => true)
     assert_equal users_path, session[:"user.return_to"]
-    follow_redirect!
 
+    follow_redirect!
     sign_in_as_user :visit => false
+
     assert_template 'users/index'
     assert_nil session[:"user.return_to"]
   end
 
-  test 'return to configured home path after sign in' do
+  test 'redirect to last requested url overwriting the stored return_to option' do
+    get expire_user_path(create_user)
+    assert_redirected_to new_user_session_path(:unauthenticated => true)
+    assert_equal expire_user_path(create_user), session[:"user.return_to"]
+
+    get users_path
+    assert_redirected_to new_user_session_path(:unauthenticated => true)
+    assert_equal users_path, session[:"user.return_to"]
+
+    follow_redirect!
+    sign_in_as_user :visit => false
+
+    assert_template 'users/index'
+    assert_nil session[:"user.return_to"]
+  end
+
+  test 'redirect to configured home path for a given scope after sign in' do
     sign_in_as_admin
     assert_equal "/admin_area/home", @request.path
   end
 
-  test 'allows session to be set by a given scope' do
+  test 'destroyed account is signed out' do
     sign_in_as_user
-    visit 'users/index'
-    assert_equal "Cart", @controller.user_session[:cart]
-  end
+    get '/users'
 
-  test 'destroyed account is logged out' do
-    sign_in_as_user
-    visit 'users/index'
     User.destroy_all
-    visit 'users/index'
+    get '/users'
     assert_redirected_to '/users/sign_in?unauthenticated=true'
   end
 
+  test 'allows session to be set by a given scope' do
+    sign_in_as_user
+    get '/users'
+    assert_equal "Cart", @controller.user_session[:cart]
+  end
+
+  # Scoped views
   test 'renders the scoped view if turned on and view is available' do
     swap Devise, :scoped_views => true do
       assert_raise Webrat::NotFoundError do
         sign_in_as_user
       end
       assert_match /Special user view/, response.body
+    end
+  end
+
+  test 'renders the scoped view if turned on in an specific controller' do
+    begin
+      Devise::SessionsController.scoped_views = true
+      assert_raise Webrat::NotFoundError do
+        sign_in_as_user
+      end
+
+      assert_match /Special user view/, response.body
+      assert !Devise::PasswordsController.scoped_views
+    ensure
+      Devise::SessionsController.send :remove_instance_variable, :@scoped_views
     end
   end
 
@@ -216,23 +248,33 @@ class AuthenticationTest < ActionController::IntegrationTest
     end
   end
 
+  # Default scope
+  test 'uses the mapping from the default scope if specified' do
+    swap Devise, :use_default_scope => true do
+      get '/sign_in'
+      assert_response :ok
+      assert_contain 'Sign in'
+    end
+  end
+
+  # Custom controller
+  test 'uses the custom controller with the custom controller view' do
+    get '/admin_area/sign_in'
+    assert_contain 'Sign in'
+    assert_contain 'Welcome to "sessions" controller!'
+    assert_contain 'Welcome to "sessions/new" view!'
+  end
+
+  # Access
   test 'render 404 on roles without permission' do
-    get 'admin_area/password/new'
+    get '/admin_area/password/new', {}, "action_dispatch.show_exceptions" => true
     assert_response :not_found
     assert_not_contain 'Send me reset password instructions'
   end
 
   test 'render 404 on roles without mapping' do
-    get 'sign_in'
+    get '/sign_in', {}, "action_dispatch.show_exceptions" => true
     assert_response :not_found
     assert_not_contain 'Sign in'
-  end
-
-  test 'uses the mapping from the default scope if specified' do
-    swap Devise, :use_default_scope => true do
-      get 'sign_in'
-      assert_response :ok
-      assert_contain 'Sign in'
-    end
   end
 end

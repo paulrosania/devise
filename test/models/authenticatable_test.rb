@@ -100,7 +100,7 @@ class AuthenticatableTest < ActiveSupport::TestCase
 
   test 'should authenticate a valid user with email and password and return it' do
     user = create_user
-    User.any_instance.stubs(:confirmed?).returns(true)
+    user.confirm!
     authenticated_user = User.authenticate(:email => user.email, :password => user.password)
     assert_equal authenticated_user, user
   end
@@ -119,7 +119,7 @@ class AuthenticatableTest < ActiveSupport::TestCase
 
   test 'should use authentication keys to retrieve users' do
     swap Devise, :authentication_keys => [:username] do
-      user = create_user(:username => "josevalim")
+      user = create_user
       assert_nil User.authenticate(:email => user.email, :password => user.password)
       assert_not_nil User.authenticate(:username => user.username, :password => user.password)
     end
@@ -130,29 +130,51 @@ class AuthenticatableTest < ActiveSupport::TestCase
     assert_not_nil Admin.authenticate(:email => admin.email, :password => admin.password)
   end
 
-  test 'should respond to old password' do
-    assert new_user.respond_to?(:old_password)
+  test 'should respond to current password' do
+    assert new_user.respond_to?(:current_password)
   end
 
-  test 'should update password with valid old password' do
+  test 'should update password with valid current password' do
     user = create_user
-    assert user.update_with_password(:old_password => '123456',
+    assert user.update_with_password(:current_password => '123456',
       :password => 'pass321', :password_confirmation => 'pass321')
     assert user.reload.valid_password?('pass321')
   end
 
-  test 'should add an error to old password when it is invalid' do
+  test 'should add an error to current password when it is invalid' do
     user = create_user
-    assert_not user.update_with_password(:old_password => 'other',
+    assert_not user.update_with_password(:current_password => 'other',
       :password => 'pass321', :password_confirmation => 'pass321')
     assert user.reload.valid_password?('123456')
-    assert_match /invalid/, user.errors[:old_password]
+    assert_match "is invalid", user.errors[:current_password].join
+  end
+
+  test 'should add an error to current password when it is blank' do
+    user = create_user
+    assert_not user.update_with_password(:password => 'pass321',
+      :password_confirmation => 'pass321')
+    assert user.reload.valid_password?('123456')
+    assert_match "can't be blank", user.errors[:current_password].join
+  end
+
+  test 'should ignore password and its confirmation if they are blank' do
+    user = create_user
+    assert user.update_with_password(:current_password => '123456', :email => "new@email.com")
+    assert_equal "new@email.com", user.email
   end
 
   test 'should not update password with invalid confirmation' do
     user = create_user
-    assert_not user.update_with_password(:old_password => '123456',
+    assert_not user.update_with_password(:current_password => '123456',
       :password => 'pass321', :password_confirmation => 'other')
     assert user.reload.valid_password?('123456')
+  end
+
+  test 'should clean up password fields on failure' do
+    user = create_user
+    assert_not user.update_with_password(:current_password => '123456',
+      :password => 'pass321', :password_confirmation => 'other')
+    assert user.password.blank?
+    assert user.password_confirmation.blank?
   end
 end

@@ -14,11 +14,7 @@ module Devise
     #   # creates a new token and send it with instructions about how to reset the password
     #   User.find(1).send_reset_password_instructions
     module Recoverable
-      def self.included(base)
-        base.class_eval do
-          extend ClassMethods
-        end
-      end
+      extend ActiveSupport::Concern
 
       # Update password saving the record and clearing token. Returns true if
       # the passwords are valid and the record was saved, false otherwise.
@@ -32,7 +28,7 @@ module Devise
       # Resets reset password token and send reset password instructions by email
       def send_reset_password_instructions
         generate_reset_password_token!
-        ::DeviseMailer.deliver_reset_password_instructions(self)
+        ::Devise::Mailer.reset_password_instructions(self).deliver
       end
 
       protected
@@ -45,7 +41,7 @@ module Devise
         # Resets the reset password token with and save the record without
         # validating
         def generate_reset_password_token!
-          generate_reset_password_token && save(false)
+          generate_reset_password_token && save(:validate => false)
         end
 
         # Removes reset_password token

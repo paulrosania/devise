@@ -4,17 +4,18 @@ module Devise
     # included in ApplicationController since they all depend on the url being
     # accessed.
     module InternalHelpers #:nodoc:
+      extend ActiveSupport::Concern
+      include Devise::Controllers::ScopedViews
 
-      def self.included(base)
-        base.class_eval do
-          unloadable
+      included do
+        helpers = [:resource, :scope_name, :resource_name,
+                  :resource_class, :devise_mapping, :devise_controller?]
 
-          helper_method :resource, :scope_name, :resource_name, :resource_class, :devise_mapping, :devise_controller?
-          hide_action   :resource, :scope_name, :resource_name, :resource_class, :devise_mapping, :devise_controller?
+        hide_action *helpers
+        helper_method *helpers
 
-          skip_before_filter *Devise.mappings.keys.map { |m| :"authenticate_#{m}!" }
-          before_filter :is_devise_resource?
-        end
+        before_filter :is_devise_resource?
+        skip_before_filter *Devise.mappings.keys.map { |m| :"authenticate_#{m}!" }
       end
 
       # Gets the actual resource stored in the instance variable
@@ -59,12 +60,9 @@ module Devise
         instance_variable_set(:"@#{resource_name}", new_resource)
       end
 
-      # Build a devise resource without setting password and password confirmation fields.
+      # Build a devise resource.
       def build_resource
-        self.resource ||= begin
-          attributes = params[resource_name].try(:except, :password, :password_confirmation)
-          resource_class.new(attributes || {})
-        end
+        self.resource = resource_class.new(params[resource_name] || {})
       end
 
       # Helper for use in before_filters where no authentication is required.
@@ -98,21 +96,6 @@ module Devise
       # Shortcut to set flash.now message. Same rules applied from set_flash_message
       def set_now_flash_message(key, kind)
         set_flash_message(key, kind, true)
-      end
-
-      # Render a view for the specified scope. Turned off by default.
-      # Accepts just :controller as option.
-      def render_with_scope(action, options={})
-        controller_name = options.delete(:controller) || self.controller_name
-        if Devise.scoped_views
-          begin
-            render :template => "#{controller_name}/#{devise_mapping.as}/#{action}"
-          rescue ActionView::MissingTemplate
-            render action, :controller => controller_name
-          end
-        else
-          render action, :controller => controller_name
-        end
       end
 
     end

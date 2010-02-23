@@ -1,12 +1,13 @@
 module Devise
   autoload :FailureApp, 'devise/failure_app'
+  autoload :Models, 'devise/models'
   autoload :Schema, 'devise/schema'
   autoload :TestHelpers, 'devise/test_helpers'
 
   module Controllers
-    autoload :Common, 'devise/controllers/common'
     autoload :Helpers, 'devise/controllers/helpers'
     autoload :InternalHelpers, 'devise/controllers/internal_helpers'
+    autoload :ScopedViews, 'devise/controllers/scoped_views'
     autoload :UrlHelpers, 'devise/controllers/url_helpers'
   end
 
@@ -14,34 +15,44 @@ module Devise
     autoload :Base, 'devise/encryptors/base'
     autoload :Bcrypt, 'devise/encryptors/bcrypt'
     autoload :AuthlogicSha512, 'devise/encryptors/authlogic_sha512'
-    autoload :AuthlogicSha1, 'devise/encryptors/authlogic_sha1'
+    autoload :ClearanceSha1, 'devise/encryptors/clearance_sha1'
     autoload :RestfulAuthenticationSha1, 'devise/encryptors/restful_authentication_sha1'
     autoload :Sha512, 'devise/encryptors/sha512'
     autoload :Sha1, 'devise/encryptors/sha1'
   end
 
-  module Orm
-    autoload :ActiveRecord, 'devise/orm/active_record'
-    autoload :DataMapper, 'devise/orm/data_mapper'
-    autoload :MongoMapper, 'devise/orm/mongo_mapper'
-  end
+  ALL = []
 
-  ALL = [:authenticatable, :activatable, :confirmable, :recoverable,
-         :rememberable, :validatable, :trackable, :timeoutable, :lockable]
+  # Authentication ones first
+  ALL.push :authenticatable, :http_authenticatable, :token_authenticatable, :rememberable
 
-  # Maps controller names to devise modules
+  # Misc after
+  ALL.push :recoverable, :registerable, :validatable
+
+  # The ones which can sign out after
+  ALL.push :activatable, :confirmable, :lockable, :timeoutable
+
+  # Stats for last, so we make sure the user is really signed in
+  ALL.push :trackable
+
+  # Maps controller names to devise modules.
   CONTROLLERS = {
-    :sessions => [:authenticatable],
+    :sessions => [:authenticatable, :token_authenticatable],
     :passwords => [:recoverable],
     :confirmations => [:confirmable],
+    :registrations => [:registerable],
     :unlocks => [:lockable]
   }
 
-  STRATEGIES  = [:rememberable, :authenticatable]
+  # Routes for generating url helpers.
+  ROUTES = [:session, :password, :confirmation, :registration, :unlock]
+
+  STRATEGIES  = [:rememberable, :http_authenticatable, :token_authenticatable, :authenticatable]
+
   TRUE_VALUES = [true, 1, '1', 't', 'T', 'true', 'TRUE']
 
   # Maps the messages types that are used in flash message.
-  FLASH_MESSAGES = [ :unauthenticated, :unconfirmed, :invalid, :timeout, :inactive, :locked ]
+  FLASH_MESSAGES = [:unauthenticated, :unconfirmed, :invalid, :invalid_token, :timeout, :inactive, :locked]
 
   # Declare encryptors length which are used in migrations.
   ENCRYPTORS_LENGTH = {
@@ -53,8 +64,8 @@ module Devise
     :bcrypt => 60
   }
 
-  # Email regex used to validate email formats. Retrieved from authlogic.
-  EMAIL_REGEX = /\A[\w\.%\+\-]+@(?:[A-Z0-9\-]+\.)+(?:[A-Z]{2,4}|museum|travel)\z/i
+  # Email regex used to validate email formats. Adapted from authlogic.
+  EMAIL_REGEX = /^([\w\.%\+\-]+)@([\w\-]+\.)+([\w]{2,})$/i
 
   # Used to encrypt password. Please generate one with rake secret.
   mattr_accessor :pepper
@@ -88,14 +99,6 @@ module Devise
   mattr_accessor :mappings
   @@mappings = ActiveSupport::OrderedHash.new
 
-  # Stores the chosen ORM.
-  mattr_accessor :orm
-  @@orm = :active_record
-
-  # TODO Remove
-  mattr_accessor :all
-  @@all = []
-
   # Tells if devise should apply the schema in ORMs where devise declaration
   # and schema belongs to the same class (as Datamapper and MongoMapper).
   mattr_accessor :apply_schema
@@ -121,7 +124,7 @@ module Devise
 
   # Tell when to use the default scope, if one cannot be found from routes.
   mattr_accessor :use_default_scope
-  @@use_default_scope
+  @@use_default_scope = false
 
   # The default scope which is used by warden.
   mattr_accessor :default_scope
@@ -129,13 +132,33 @@ module Devise
 
   # Address which sends Devise e-mails.
   mattr_accessor :mailer_sender
-  @@mailer_sender
+  @@mailer_sender = nil
+
+  # Authentication token params key name of choice. E.g. /users/sign_in?some_key=...
+  mattr_accessor :token_authentication_key
+  @@token_authentication_key = :auth_token
+
+  # The realm used in Http Basic Authentication
+  mattr_accessor :http_authentication_realm
+  @@http_authentication_realm = "Application"
 
   class << self
     # Default way to setup Devise. Run script/generate devise_install to create
     # a fresh initializer with all configuration values.
     def setup
       yield self
+    end
+
+    # TODO Remove me on 1.1.0 final
+    def orm=(value)
+      ActiveSupport::Deprecation.warn "Devise.orm= and config.orm= are deprecated. " <<
+        "Just load \"devise/orm/\#{ORM_NAME}\" if Devise supports your ORM"
+    end
+
+    # TODO Remove me on 1.1.0 final
+    def default_url_options
+      ActiveSupport::Deprecation.warn "Devise.default_url_options and config.default_url_options are deprecated. " <<
+        "Just modify ApplicationController.default_url_options and Devise will automatically pick it up"
     end
 
     # Sets warden configuration using a block that will be invoked on warden
@@ -153,11 +176,6 @@ module Devise
       @warden_config = block
     end
 
-    # Configure default url options to be used within Devise and ActionController.
-    def default_url_options(&block)
-      Devise::Mapping.metaclass.send :define_method, :default_url_options, &block
-    end
-
     # A method used internally to setup warden manager from the Rails initialize
     # block.
     def configure_warden(config) #:nodoc:
@@ -168,11 +186,6 @@ module Devise
 
       # If the user provided a warden hook, call it now.
       @warden_config.try :call, config
-    end
-
-    # The class of the configured ORM
-    def orm_class
-      Devise::Orm.const_get(@@orm.to_s.camelize.to_sym)
     end
 
     # Generate a friendly string randomically to be used as token.

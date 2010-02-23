@@ -9,11 +9,9 @@ module Devise
     #
     # Configuration:
     #
-    #   timeout: the time you want to timeout the user session without activity.
+    #   timeout_in: the time you want to timeout the user session without activity.
     module Timeoutable
-      def self.included(base)
-        base.extend ClassMethods
-      end
+      extend ActiveSupport::Concern
 
       # Checks whether the user session has expired based on configured time.
       def timedout?(last_access)

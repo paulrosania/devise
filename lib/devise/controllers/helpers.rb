@@ -2,18 +2,11 @@ module Devise
   module Controllers
     # Those helpers are convenience methods added to ApplicationController.
     module Helpers
+      extend ActiveSupport::Concern
 
-      def self.included(base)
-        base.class_eval do
-          helper_method :warden, :signed_in?, :devise_controller?,
-                        *Devise.mappings.keys.map { |m| [:"current_#{m}", :"#{m}_signed_in?"] }.flatten
-
-          # Use devise default_url_options. We have to declare it here to overwrite
-          # default definitions.
-          def default_url_options(options=nil)
-            Devise::Mapping.default_url_options
-          end
-        end
+      included do
+        helper_method :warden, :signed_in?, :devise_controller?,
+                      *Devise.mappings.keys.map { |m| [:"current_#{m}", :"#{m}_signed_in?"] }.flatten
       end
 
       # The main accessor for the warden proxy instance
@@ -176,7 +169,7 @@ module Devise
       #     before_filter :authenticate_admin! # Tell devise to use :admin map
       #
       Devise.mappings.each_key do |mapping|
-        class_eval <<-METHODS, __FILE__, __LINE__
+        class_eval <<-METHODS, __FILE__, __LINE__ + 1
           def authenticate_#{mapping}!
             warden.authenticate!(:scope => :#{mapping})
           end
