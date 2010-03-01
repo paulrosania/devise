@@ -15,16 +15,16 @@ module Devise
         include Devise::Schema
 
         SCHEMA_OPTIONS = {
-          :null  => :nullable,
+          :null  => :required,
           :limit => :length
         }
 
         # Tell how to apply schema methods. This automatically maps :limit to
-        # :length and :null to :nullable.
+        # :length and :null to :required.
         def apply_schema(name, type, options={})
           SCHEMA_OPTIONS.each do |old_key, new_key|
             next unless options.key?(old_key)
-            options[new_key] = options.delete(old_key)
+            options[new_key] = !options.delete(old_key)
           end
 
           property name, type, options
@@ -59,14 +59,11 @@ module Devise
 
           # Add ActiveRecord like finder
           def find(*args)
-            options = args.extract_options!
             case args.first
-              when :first
-                first(options)
-              when :all
-                all(options)
-              else
-                get(*args)
+            when :first, :all
+              send(args.shift, *args)
+            else
+              get(*args)
             end
           end
         end
