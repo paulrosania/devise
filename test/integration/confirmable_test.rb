@@ -1,4 +1,4 @@
-require 'test/test_helper'
+require 'test_helper'
 
 class ConfirmationTest < ActionController::IntegrationTest
 
@@ -11,7 +11,7 @@ class ConfirmationTest < ActionController::IntegrationTest
     ActionMailer::Base.deliveries.clear
 
     visit new_user_session_path
-    click_link 'Didn\'t receive confirmation instructions?'
+    click_link "Didn't receive confirmation instructions?"
 
     fill_in 'email', :with => user.email
     click_button 'Resend confirmation instructions'
@@ -26,7 +26,7 @@ class ConfirmationTest < ActionController::IntegrationTest
 
     assert_response :success
     assert_template 'confirmations/new'
-    assert_have_selector '#errorExplanation'
+    assert_have_selector '#error_explanation'
     assert_contain /Confirmation token(.*)invalid/
   end
 
@@ -49,7 +49,7 @@ class ConfirmationTest < ActionController::IntegrationTest
     visit_user_confirmation_with_token(user.confirmation_token)
 
     assert_template 'confirmations/new'
-    assert_have_selector '#errorExplanation'
+    assert_have_selector '#error_explanation'
     assert_contain 'already confirmed'
   end
 
@@ -88,9 +88,9 @@ class ConfirmationTest < ActionController::IntegrationTest
 
   test 'error message is configurable by resource name' do
     store_translations :en, :devise => {
-      :sessions => { :admin => { :unconfirmed => "Not confirmed user" } }
+      :failure => { :user => { :unconfirmed => "Not confirmed user" } }
     } do
-      get new_admin_session_path(:unconfirmed => true)
+      sign_in_as_user(:confirm => false)
       assert_contain 'Not confirmed user'
     end
   end

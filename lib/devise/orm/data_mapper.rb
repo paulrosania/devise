@@ -24,9 +24,10 @@ module Devise
         def apply_schema(name, type, options={})
           SCHEMA_OPTIONS.each do |old_key, new_key|
             next unless options.key?(old_key)
-            options[new_key] = !options.delete(old_key)
+            options[new_key] = options.delete(old_key)
           end
 
+          options.delete(:default) if options[:default].nil?
           property name, type, options
         end
       end
@@ -37,18 +38,22 @@ module Devise
         module ClassMethods
           # Hooks for confirmable
           def before_create(*args)
-            wrap_hook(:before, *args)
+            wrap_hook(:before, :create, *args)
           end
 
           def after_create(*args)
-            wrap_hook(:after, *args)
+            wrap_hook(:after, :create, *args)
+          end
+          
+          def before_save(*args)
+            wrap_hook(:before, :save, *args)
           end
 
-          def wrap_hook(action, *args)
+          def wrap_hook(action, method, *args)
             options = args.extract_options!
 
             args.each do |callback|
-              send action, :create, callback
+              send action, method, callback
               class_eval <<-METHOD, __FILE__, __LINE__ + 1
                 def #{callback}
                   super if #{options[:if] || true}
@@ -67,6 +72,10 @@ module Devise
             end
           end
         end
+        
+        def changed?
+          dirty?
+        end
 
         def save(options=nil)
           if options.is_a?(Hash) && options[:validate] == false
@@ -75,12 +84,16 @@ module Devise
             super()
           end
         end
+        
+        def update_attributes(*args)
+          update(*args)
+        end
       end
     end
   end
 end
 
 DataMapper::Model.class_eval do
-  extend  Devise::ORM::DataMapper::Hook
   include Devise::Models
+  include Devise::Orm::DataMapper::Hook
 end

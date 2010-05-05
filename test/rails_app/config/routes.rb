@@ -6,8 +6,8 @@ Rails::Application.routes.draw do
   resources :admins, :only => [:index]
 
   devise_for :users
-  devise_for :admin, :as => "admin_area", :controllers => { :sessions => "sessions" }
-  devise_for :accounts, :scope => "manager", :path_prefix => ":locale",
+  devise_for :admin, :path => "admin_area", :controllers => { :sessions => "sessions" }, :skip => :passwords
+  devise_for :accounts, :singular => "manager", :path_prefix => ":locale",
     :class_name => "User", :path_names => {
       :sign_in => "login", :sign_out => "logout",
       :password => "secret", :confirmation => "verification",
@@ -16,6 +16,9 @@ Rails::Application.routes.draw do
 
   match "/admin_area/home", :to => "admins#index", :as => :admin_root
   match "/sign_in", :to => "devise/sessions#new"
+
+  # Dummy route for new admin pasword
+  match "/anywhere", :to => "foo#bar", :as => :new_admin_password
 
   root :to => "home#index"
 end

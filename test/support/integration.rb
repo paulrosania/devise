@@ -1,5 +1,6 @@
-class ActionController::IntegrationTest
+require 'action_dispatch/testing/integration'
 
+class ActionDispatch::IntegrationTest
   def warden
     request.env['warden']
   end
@@ -14,7 +15,7 @@ class ActionController::IntegrationTest
         :created_at => Time.now.utc
       )
       user.confirm! unless options[:confirm] == false
-      user.lock! if options[:locked] == true
+      user.lock_access! if options[:locked] == true
       user
     end
   end
@@ -32,7 +33,7 @@ class ActionController::IntegrationTest
     user = create_user(options)
     get new_user_session_path unless options[:visit] == false
     fill_in 'email', :with => 'user@test.com'
-    fill_in 'password', :with => '123456'
+    fill_in 'password', :with => options[:password] || '123456'
     check 'remember me' if options[:remember_me] == true
     yield if block_given?
     click_button 'Sign In'
@@ -47,10 +48,6 @@ class ActionController::IntegrationTest
     yield if block_given?
     click_button 'Sign In'
     admin
-  end
-
-  def assert_current_path(path)
-    assert_equal(prepend_host(path), prepend_host(current_url))
   end
 
   # Fix assert_redirect_to in integration sessions because they don't take into

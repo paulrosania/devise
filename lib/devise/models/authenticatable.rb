@@ -1,117 +1,82 @@
-require 'devise/strategies/authenticatable'
+require 'devise/hooks/activatable'
 
 module Devise
   module Models
-    # Authenticable Module, responsible for encrypting password and validating
-    # authenticity of a user while signing in.
+    # Authenticable module. Holds common settings for authentication.
     #
-    # Configuration:
+    # == Configuration:
     #
     # You can overwrite configuration values by setting in globally in Devise,
     # using devise method or overwriting the respective instance method.
     #
-    #   pepper: encryption key used for creating encrypted password. Each time
-    #           password changes, it's gonna be encrypted again, and this key
-    #           is added to the password and salt to create a secure hash.
-    #           Always use `rake secret' to generate a new key.
+    #   authentication_keys: parameters used for authentication. By default [:email].
     #
-    #   stretches: defines how many times the password will be encrypted.
+    #   http_authenticatable: if this model allows http authentication. By default true.
+    #   It also accepts an array specifying the strategies that should allow http.
     #
-    #   encryptor: the encryptor going to be used. By default :sha1.
+    #   params_authenticatable: if this model allows authentication through request params. By default true.
+    #   It also accepts an array specifying the strategies that should allow params authentication.
     #
-    #   authentication_keys: parameters used for authentication. By default [:email]
+    # == Active?
     #
-    # Examples:
+    # Before authenticating an user and in each request, Devise checks if your model is active by
+    # calling model.active?. This method is overwriten by other devise modules. For instance,
+    # :confirmable overwrites .active? to only return true if your model was confirmed.
     #
-    #    User.authenticate('email@test.com', 'password123')  # returns authenticated user or nil
-    #    User.find(1).valid_password?('password123')         # returns true/false
+    # You overwrite this method yourself, but if you do, don't forget to call super:
+    #
+    #   def active?
+    #     super && special_condition_is_valid?
+    #   end
+    #
+    # Whenever active? returns false, Devise asks the reason why your model is inactive using
+    # the inactive_message method. You can overwrite it as well:
+    #
+    #   def inactive_message
+    #     special_condition_is_valid? ? super : :special_condition_is_not_valid
+    #   end
     #
     module Authenticatable
       extend ActiveSupport::Concern
 
       included do
-        attr_reader :password, :current_password
-        attr_accessor :password_confirmation
+        class_attribute :devise_modules, :instance_writer => false
+        self.devise_modules ||= []
       end
 
-      # Regenerates password salt and encrypted password each time password is set,
-      # and then trigger any "after_changed_password"-callbacks.
-      def password=(new_password)
-        @password = new_password
-
-        if @password.present?
-          self.password_salt = self.class.encryptor_class.salt
-          self.encrypted_password = password_digest(@password)
-        end
-      end
-
-      # Verifies whether an incoming_password (ie from sign in) is the user password.
-      def valid_password?(incoming_password)
-        password_digest(incoming_password) == self.encrypted_password
-      end
-
-      # Verifies whether an +incoming_authentication_token+ (i.e. from single access URL)
-      # is the user authentication token.
-      def valid_authentication_token?(incoming_auth_token)
-        incoming_auth_token == self.authentication_token
-      end
-
-      # Checks if a resource is valid upon authentication.
-      def valid_for_authentication?(attributes)
-        valid_password?(attributes[:password])
-      end
-
-      # Set password and password confirmation to nil
-      def clean_up_passwords
-        self.password = self.password_confirmation = nil
-      end
-
-      # Update record attributes when :current_password matches, otherwise returns
-      # error on :current_password. It also automatically rejects :password and
-      # :password_confirmation if they are blank.
-      def update_with_password(params={})
-        current_password = params.delete(:current_password)
-
-        params.delete(:password)              if params[:password].blank?
-        params.delete(:password_confirmation) if params[:password_confirmation].blank?
-
-        result = if valid_password?(current_password)
-          update_attributes(params)
+      # Check if the current object is valid for authentication. This method and find_for_authentication
+      # are the methods used in a Warden::Strategy to check if a model should be signed in or not.
+      #
+      # However, you should not need to overwrite this method, you should overwrite active? and
+      # inactive_message instead.
+      def valid_for_authentication?
+        if active?
+          block_given? ? yield : true
         else
-          self.errors.add(:current_password, current_password.blank? ? :blank : :invalid)
-          self.attributes = params
-          false
+          inactive_message
         end
-
-        clean_up_passwords unless result
-        result
       end
 
-      protected
+      def active?
+        true
+      end
 
-        # Digests the password using the configured encryptor.
-        def password_digest(password)
-          self.class.encryptor_class.digest(password, self.class.stretches, self.password_salt, self.class.pepper)
-        end
+      def inactive_message
+        :inactive
+      end
 
       module ClassMethods
-        Devise::Models.config(self, :pepper, :stretches, :encryptor, :authentication_keys)
+        Devise::Models.config(self, :authentication_keys, :http_authenticatable, :params_authenticatable)
 
-        # Authenticate a user based on configured attribute keys. Returns the
-        # authenticated user if it's valid or nil.
-        def authenticate(attributes={})
-          return unless authentication_keys.all? { |k| attributes[k].present? }
-          conditions = attributes.slice(*authentication_keys)
-          resource = find_for_authentication(conditions)
-          resource if resource.try(:valid_for_authentication?, attributes)
+        def params_authenticatable?(strategy)
+          params_authenticatable.is_a?(Array) ?
+            params_authenticatable.include?(strategy) : params_authenticatable
         end
 
-        # Returns the class for the configured encryptor.
-        def encryptor_class
-          @encryptor_class ||= ::Devise::Encryptors.const_get(encryptor.to_s.classify)
+        def http_authenticatable?(strategy)
+          http_authenticatable.is_a?(Array) ?
+            http_authenticatable.include?(strategy) : http_authenticatable
         end
-
-      protected
 
         # Find first record based on conditions given (ie by the sign in form).
         # Overwrite to add customized conditions, create a join, or maybe use a
@@ -120,11 +85,31 @@ module Devise
         #
         #   def self.find_for_authentication(conditions={})
         #     conditions[:active] = true
-        #     find(:first, :conditions => conditions)
+        #     super
         #   end
         #
         def find_for_authentication(conditions)
           find(:first, :conditions => conditions)
+        end
+
+        # Find an initialize a record setting an error if it can't be found.
+        def find_or_initialize_with_error_by(attribute, value, error=:invalid) #:nodoc:
+          if value.present?
+            conditions = { attribute => value }
+            record = find(:first, :conditions => conditions)
+          end
+
+          unless record
+            record = new
+            if value.present?
+              record.send(:"#{attribute}=", value)
+            else
+              error = :blank
+            end
+            record.errors.add(attribute, error)
+          end
+
+          record
         end
       end
     end

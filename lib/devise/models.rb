@@ -1,16 +1,5 @@
 module Devise
   module Models
-    autoload :Activatable, 'devise/models/activatable'
-    autoload :Authenticatable, 'devise/models/authenticatable'
-    autoload :Confirmable, 'devise/models/confirmable'
-    autoload :Lockable, 'devise/models/lockable'
-    autoload :Recoverable, 'devise/models/recoverable'
-    autoload :Rememberable, 'devise/models/rememberable'
-    autoload :Registerable, 'devise/models/registerable'
-    autoload :Timeoutable, 'devise/models/timeoutable'
-    autoload :Trackable, 'devise/models/trackable'
-    autoload :Validatable, 'devise/models/validatable'
-
     # Creates configuration values for Devise and for the given module.
     #
     #   Devise::Models.config(Devise::Authenticable, :stretches, 10)
@@ -49,17 +38,30 @@ module Devise
 
     # Include the chosen devise modules in your model:
     #
-    #   devise :authenticatable, :confirmable, :recoverable
+    #   devise :database_authenticatable, :confirmable, :recoverable
     #
     # You can also give any of the devise configuration values in form of a hash,
     # with specific values for this model. Please check your Devise initializer
     # for a complete description on those values.
     #
     def devise(*modules)
-      raise "You need to give at least one Devise module" if modules.empty?
-
+      include Devise::Models::Authenticatable
       options = modules.extract_options!
-      @devise_modules = Devise::ALL & modules.map(&:to_sym).uniq
+
+      if modules.delete(:authenticatable)
+        ActiveSupport::Deprecation.warn ":authenticatable as module is deprecated. Please give :database_authenticatable instead.", caller
+        modules << :database_authenticatable
+      end
+
+      if modules.delete(:activatable)
+        ActiveSupport::Deprecation.warn ":activatable as module is deprecated. It's included in your model by default.", caller
+      end
+
+      if modules.delete(:http_authenticatable)
+        ActiveSupport::Deprecation.warn ":http_authenticatable as module is deprecated and is on by default. Revert by setting :http_authenticatable => false.", caller
+      end
+
+      self.devise_modules += Devise::ALL & modules.map(&:to_sym).uniq
 
       devise_modules_hook! do
         devise_modules.each { |m| include Devise::Models.const_get(m.to_s.classify) }
@@ -67,38 +69,12 @@ module Devise
       end
     end
 
-    # Stores all modules included inside the model, so we are able to verify
-    # which routes are needed.
-    def devise_modules
-      @devise_modules ||= []
-    end
-
     # The hook which is called inside devise. So your ORM can include devise
     # compatibility stuff.
     def devise_modules_hook!
       yield
     end
-
-    # Find an initialize a record setting an error if it can't be found.
-    def find_or_initialize_with_error_by(attribute, value, error=:invalid)
-      if value.present?
-        conditions = { attribute => value }
-        record = find(:first, :conditions => conditions)
-      end
-
-      unless record
-        record = new
-
-        if value.present?
-          record.send(:"#{attribute}=", value)
-        else
-          error = :blank
-        end
-
-        record.errors.add(attribute, error)
-      end
-
-      record
-    end
   end
 end
+
+require 'devise/models/authenticatable'

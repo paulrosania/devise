@@ -8,13 +8,15 @@ module Devise
       include Devise::Controllers::ScopedViews
 
       included do
-        helpers = [:resource, :scope_name, :resource_name,
-                  :resource_class, :devise_mapping, :devise_controller?]
+        unloadable
+        helper DeviseHelper
 
+        helpers = %w(resource scope_name resource_name
+                     resource_class devise_mapping devise_controller?)
         hide_action *helpers
         helper_method *helpers
 
-        before_filter :is_devise_resource?
+        prepend_before_filter :is_devise_resource?
         skip_before_filter *Devise.mappings.keys.map { |m| :"authenticate_#{m}!" }
       end
 
@@ -52,7 +54,8 @@ module Devise
 
       # Checks whether it's a devise mapped resource or not.
       def is_devise_resource? #:nodoc:
-        raise ActionController::UnknownAction unless devise_mapping && devise_mapping.allows?(controller_name)
+        raise ActionController::UnknownAction unless devise_mapping &&
+          devise_mapping.allowed_controllers.include?(controller_path)
       end
 
       # Sets the resource creating an instance variable
@@ -61,8 +64,9 @@ module Devise
       end
 
       # Build a devise resource.
-      def build_resource
-        self.resource = resource_class.new(params[resource_name] || {})
+      def build_resource(hash=nil)
+        hash ||= params[resource_name] || {}
+        self.resource = resource_class.new(hash)
       end
 
       # Helper for use in before_filters where no authentication is required.
@@ -87,17 +91,14 @@ module Devise
       #
       # Please refer to README or en.yml locale file to check what messages are
       # available.
-      def set_flash_message(key, kind, now=false)
-        flash_hash = now ? flash.now : flash
-        flash_hash[key] = I18n.t(:"#{resource_name}.#{kind}",
+      def set_flash_message(key, kind)
+        flash[key] = I18n.t(:"#{resource_name}.#{kind}", :resource_name => resource_name,
                             :scope => [:devise, controller_name.to_sym], :default => kind)
       end
 
-      # Shortcut to set flash.now message. Same rules applied from set_flash_message
-      def set_now_flash_message(key, kind)
-        set_flash_message(key, kind, true)
+      def clean_up_passwords(object)
+        object.clean_up_passwords if object.respond_to?(:clean_up_passwords)
       end
-
     end
   end
 end

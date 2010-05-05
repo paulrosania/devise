@@ -1,4 +1,4 @@
-require 'test/test_helper'
+require 'test_helper'
 
 class RememberMeTest < ActionController::IntegrationTest
 
@@ -6,8 +6,15 @@ class RememberMeTest < ActionController::IntegrationTest
     Devise.remember_for = 1
     user = create_user
     user.remember_me!
-    cookies['remember_user_token'] = User.serialize_into_cookie(user) + add_to_token
+    raw_cookie = User.serialize_into_cookie(user).tap { |a| a.last << add_to_token }
+    cookies['remember_user_token'] = generate_signed_cookie(raw_cookie)
     user
+  end
+
+  def generate_signed_cookie(raw_cookie)
+    request = ActionDispatch::TestRequest.new
+    request.cookie_jar.signed['raw_cookie'] = raw_cookie
+    request.cookie_jar['raw_cookie']
   end
 
   test 'do not remember the user if he has not checked remember me option' do
@@ -40,7 +47,7 @@ class RememberMeTest < ActionController::IntegrationTest
     user = create_user_and_remember('add')
     get users_path
     assert_not warden.authenticated?(:user)
-    assert_redirected_to new_user_session_path(:unauthenticated => true)
+    assert_redirected_to new_user_session_path
   end
 
   test 'do not remember with token expired' do
@@ -48,7 +55,7 @@ class RememberMeTest < ActionController::IntegrationTest
     swap Devise, :remember_for => 0 do
       get users_path
       assert_not warden.authenticated?(:user)
-      assert_redirected_to new_user_session_path(:unauthenticated => true)
+      assert_redirected_to new_user_session_path
     end
   end
 

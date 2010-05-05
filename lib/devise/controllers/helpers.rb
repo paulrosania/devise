@@ -6,7 +6,7 @@ module Devise
 
       included do
         helper_method :warden, :signed_in?, :devise_controller?,
-                      *Devise.mappings.keys.map { |m| [:"current_#{m}", :"#{m}_signed_in?"] }.flatten
+                      *Devise.mappings.keys.map { |m| [:"current_#{m}", :"#{m}_signed_in?", :"#{m}_session"] }.flatten
       end
 
       # The main accessor for the warden proxy instance
@@ -21,18 +21,6 @@ module Devise
       #   before_filter :my_filter, :unless => { |c| c.devise_controller? }
       def devise_controller?
         false
-      end
-
-      # Attempts to authenticate the given scope by running authentication hooks,
-      # but does not redirect in case of failures.
-      def authenticate(scope)
-        warden.authenticate(:scope => scope)
-      end
-
-      # Attempts to authenticate the given scope by running authentication hooks,
-      # redirecting in case of failures.
-      def authenticate!(scope)
-        warden.authenticate!(:scope => scope)
       end
 
       # Check if the given scope is signed in session, without running
@@ -79,7 +67,7 @@ module Devise
       #
       def stored_location_for(resource_or_scope)
         scope = Devise::Mapping.find_scope!(resource_or_scope)
-        session.delete(:"#{scope}.return_to")
+        session.delete(:"#{scope}_return_to")
       end
 
       # The default url to be used after signing in. This is used by all Devise
@@ -129,10 +117,10 @@ module Devise
       #
       # If just a symbol is given, consider that the user was already signed in
       # through other means and just perform the redirection.
-      def sign_in_and_redirect(resource_or_scope, resource=nil, skip=false)
+      def sign_in_and_redirect(resource_or_scope, resource=nil)
         scope      = Devise::Mapping.find_scope!(resource_or_scope)
         resource ||= resource_or_scope
-        sign_in(scope, resource) unless skip
+        sign_in(scope, resource) unless warden.user(scope) == resource
         redirect_to stored_location_for(scope) || after_sign_in_path_for(resource)
       end
 
@@ -150,9 +138,9 @@ module Devise
       # access that specific controller/action.
       # Example:
       #
-      #   Maps:
-      #     User => :authenticatable
-      #     Admin => :authenticatable
+      #   Roles:
+      #     User
+      #     Admin
       #
       #   Generated methods:
       #     authenticate_user!  # Signs user in or redirect

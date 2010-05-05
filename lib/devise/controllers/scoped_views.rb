@@ -4,7 +4,7 @@ module Devise
       extend ActiveSupport::Concern
 
       module ClassMethods
-        def scoped_views
+        def scoped_views?
           defined?(@scoped_views) ? @scoped_views : Devise.scoped_views
         end
 
@@ -20,9 +20,9 @@ module Devise
       def render_with_scope(action, options={})
         controller_name = options.delete(:controller) || self.controller_name
 
-        if self.class.scoped_views
+        if self.class.scoped_views?
           begin
-            render :template => "#{devise_mapping.as}/#{controller_name}/#{action}"
+            render :template => "#{devise_mapping.plural}/#{controller_name}/#{action}"
           rescue ActionView::MissingTemplate
             render :template => "#{controller_path}/#{action}"
           end

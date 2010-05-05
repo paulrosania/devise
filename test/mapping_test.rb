@@ -1,32 +1,39 @@
-require 'test/test_helper'
+require 'test_helper'
 
 class MappingTest < ActiveSupport::TestCase
 
   test 'store options' do
     mapping = Devise.mappings[:user]
     assert_equal User,                mapping.to
-    assert_equal User.devise_modules, mapping.for
-    assert_equal :users,              mapping.as
+    assert_equal User.devise_modules, mapping.modules
+    assert_equal :users,              mapping.plural
+    assert_equal :user,               mapping.singular
+    assert_equal :users,              mapping.path
   end
 
-  test 'allows as to be given' do
-    assert_equal :admin_area, Devise.mappings[:admin].as
+  test 'allows path to be given' do
+    assert_equal :admin_area, Devise.mappings[:admin].path
   end
 
-  test 'allow custom scope to be given' do
-    assert_equal :accounts, Devise.mappings[:manager].as
+  test 'allows custom singular to be given' do
+    assert_equal :accounts, Devise.mappings[:manager].path
   end
 
   test 'allows a controller depending on the mapping' do
-    mapping = Devise.mappings[:user]
-    assert mapping.allows?(:sessions)
-    assert mapping.allows?(:confirmations)
-    assert mapping.allows?(:passwords)
+    allowed = Devise.mappings[:user].allowed_controllers
+    assert allowed.include?("devise/sessions")
+    assert allowed.include?("devise/confirmations")
+    assert allowed.include?("devise/passwords")
 
-    mapping = Devise.mappings[:admin]
-    assert mapping.allows?(:sessions)
-    assert_not mapping.allows?(:confirmations)
-    assert_not mapping.allows?(:passwords)
+    allowed = Devise.mappings[:admin].allowed_controllers
+    assert allowed.include?("sessions")
+    assert_not allowed.include?("devise/confirmations")
+    assert_not allowed.include?("devise/unlocks")
+  end
+
+  test 'has strategies depending on the model declaration' do
+    assert_equal [:rememberable, :token_authenticatable, :database_authenticatable], Devise.mappings[:user].strategies
+    assert_equal [:database_authenticatable], Devise.mappings[:admin].strategies
   end
 
   test 'find mapping by path' do
@@ -38,20 +45,15 @@ class MappingTest < ActiveSupport::TestCase
     assert_equal Devise.mappings[:admin], Devise::Mapping.find_by_path("/admin_area/session")
   end
 
-  test 'find mapping by class' do
-    assert_nil Devise::Mapping.find_by_class(String)
-    assert_equal Devise.mappings[:user], Devise::Mapping.find_by_class(User)
-  end
-
-  test 'find mapping by class works with single table inheritance' do
-    klass = Class.new(User)
-    assert_equal Devise.mappings[:user], Devise::Mapping.find_by_class(klass)
-  end
-
   test 'find scope for a given object' do
     assert_equal :user, Devise::Mapping.find_scope!(User)
     assert_equal :user, Devise::Mapping.find_scope!(:user)
     assert_equal :user, Devise::Mapping.find_scope!(User.new)
+  end
+
+  test 'find scope works with single table inheritance' do
+    assert_equal :user, Devise::Mapping.find_scope!(Class.new(User))
+    assert_equal :user, Devise::Mapping.find_scope!(Class.new(User).new)
   end
 
   test 'find scope raises an error if cannot be found' do
@@ -91,13 +93,13 @@ class MappingTest < ActiveSupport::TestCase
   end
 
   test 'retrieve as from the proper position' do
-    assert_equal 1, Devise.mappings[:user].as_position
-    assert_equal 2, Devise.mappings[:manager].as_position
+    assert_equal 1, Devise.mappings[:user].segment_position
+    assert_equal 2, Devise.mappings[:manager].segment_position
   end
 
   test 'path is returned with path prefix and as' do
-    assert_equal '/users', Devise.mappings[:user].path
-    assert_equal '/:locale/accounts', Devise.mappings[:manager].path
+    assert_equal '/users', Devise.mappings[:user].full_path
+    assert_equal '/:locale/accounts', Devise.mappings[:manager].full_path
   end
 
   test 'magic predicates' do
@@ -110,8 +112,9 @@ class MappingTest < ActiveSupport::TestCase
 
     mapping = Devise.mappings[:admin]
     assert mapping.authenticatable?
+    assert mapping.recoverable?
     assert_not mapping.confirmable?
-    assert_not mapping.recoverable?
+    assert_not mapping.lockable?
     assert_not mapping.rememberable?
   end
 end

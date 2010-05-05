@@ -1,12 +1,14 @@
 class DeviseCreate<%= table_name.camelize %> < ActiveRecord::Migration
   def self.up
     create_table(:<%= table_name %>) do |t|
-      t.authenticatable :encryptor => :sha1, :null => false
+      t.database_authenticatable :null => false
       t.confirmable
       t.recoverable
       t.rememberable
       t.trackable
-      # t.lockable
+
+      # t.lockable :lock_strategy => :<%= Devise.lock_strategy %>, :unlock_strategy => :<%= Devise.unlock_strategy %>
+      # t.token_authenticatable
 
       t.timestamps
     end

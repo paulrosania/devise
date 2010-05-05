@@ -3,7 +3,7 @@ module Devise
     # This module contains some helpers and handle schema (migrations):
     #
     #   create_table :accounts do |t|
-    #     t.authenticatable
+    #     t.database_authenticatable
     #     t.confirmable
     #     t.recoverable
     #     t.rememberable
@@ -31,8 +31,6 @@ module Devise
   end
 end
 
-if defined?(ActiveRecord)
-  ActiveRecord::Base.extend Devise::Models
-  ActiveRecord::ConnectionAdapters::Table.send :include, Devise::Orm::ActiveRecord::Schema
-  ActiveRecord::ConnectionAdapters::TableDefinition.send :include, Devise::Orm::ActiveRecord::Schema
-end
+ActiveRecord::Base.extend Devise::Models
+ActiveRecord::ConnectionAdapters::Table.send :include, Devise::Orm::ActiveRecord::Schema
+ActiveRecord::ConnectionAdapters::TableDefinition.send :include, Devise::Orm::ActiveRecord::Schema

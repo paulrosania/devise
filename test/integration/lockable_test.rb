@@ -1,4 +1,4 @@
-require 'test/test_helper'
+require 'test_helper'
 
 class LockTest < ActionController::IntegrationTest
   
@@ -11,7 +11,7 @@ class LockTest < ActionController::IntegrationTest
     ActionMailer::Base.deliveries.clear
 
     visit new_user_session_path
-    click_link 'Didn\'t receive unlock instructions?'
+    click_link "Didn't receive unlock instructions?"
 
     fill_in 'email', :with => user.email
     click_button 'Resend unlock instructions'
@@ -26,7 +26,7 @@ class LockTest < ActionController::IntegrationTest
     ActionMailer::Base.deliveries.clear
 
     visit new_user_session_path
-    click_link 'Didn\'t receive unlock instructions?'
+    click_link "Didn't receive unlock instructions?"
 
     fill_in 'email', :with => user.email
     click_button 'Resend unlock instructions'
@@ -36,31 +36,47 @@ class LockTest < ActionController::IntegrationTest
     assert_equal 0, ActionMailer::Base.deliveries.size
   end
 
+  test 'unlocked pages should not be available if email strategy is disabled' do
+    visit "/users/sign_in"
+    click_link "Didn't receive unlock instructions?"
+
+    swap Devise, :unlock_strategy => :time do
+      visit "/users/sign_in"
+
+      assert_raise Webrat::NotFoundError do
+        click_link "Didn't receive unlock instructions?"
+      end
+
+      assert_raise AbstractController::ActionNotFound do
+        visit new_user_unlock_path
+      end
+    end
+  end
+
   test 'user with invalid unlock token should not be able to unlock an account' do
     visit_user_unlock_with_token('invalid_token')
 
     assert_response :success
     assert_template 'unlocks/new'
-    assert_have_selector '#errorExplanation'
+    assert_have_selector '#error_explanation'
     assert_contain /Unlock token(.*)invalid/
   end
 
   test "locked user should be able to unlock account" do
     user = create_user(:locked => true)
-    assert user.locked?
+    assert user.access_locked?
 
     visit_user_unlock_with_token(user.unlock_token)
 
     assert_template 'home/index'
     assert_contain 'Your account was successfully unlocked.'
 
-    assert_not user.reload.locked?
+    assert_not user.reload.access_locked?
   end
 
   test "sign in user automatically after unlocking it's account" do
     user = create_user(:locked => true)
     visit_user_unlock_with_token(user.unlock_token)
-
     assert warden.authenticated?(:user)
   end
 
@@ -71,11 +87,23 @@ class LockTest < ActionController::IntegrationTest
     assert_not warden.authenticated?(:user)
   end
 
+  test "user should not send a new e-mail if already locked" do
+    user = create_user(:locked => true)
+    user.failed_attempts = User.maximum_attempts + 1
+    user.save!
+
+    ActionMailer::Base.deliveries.clear
+
+    sign_in_as_user(:password => "invalid")
+    assert_contain 'Your account is locked.'
+    assert ActionMailer::Base.deliveries.empty?
+  end
+
   test 'error message is configurable by resource name' do
     store_translations :en, :devise => {
-      :sessions => { :admin => { :locked => "You are locked!" } }
+      :failure => { :user => { :locked => "You are locked!" } }
     } do
-      get new_admin_session_path(:locked => true)
+      user = sign_in_as_user(:locked => true)
       assert_contain 'You are locked!'
     end
   end

@@ -1,4 +1,4 @@
-require 'test/test_helper'
+require 'test_helper'
 
 class MapRoutingTest < ActionController::TestCase
 
@@ -82,9 +82,9 @@ class MapRoutingTest < ActionController::TestCase
     assert_recognizes({:controller => 'sessions', :action => 'new'}, {:path => 'admin_area/sign_in', :method => :get})
   end
 
-  test 'does not map admin confirmation' do
+  test 'does not map admin password' do
     assert_raise ActionController::RoutingError do
-      assert_recognizes({:controller => 'devise/confirmations', :action => 'new'}, 'admin_area/confirmation/new')
+      assert_recognizes({:controller => 'devise/passwords', :action => 'new'}, 'admin_area/password/new')
     end
   end
 

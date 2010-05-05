@@ -1,19 +1,64 @@
-== 1.1.pre
+== 1.1.rc1
 
 * enhancements
   * Rails 3 compatibility.
   * All controllers and views are namespaced, for example: Devise::SessionsController and "devise/sessions".
-  * You can specify the controller in routes and have specific controllers for each role.
   * Devise.orm is deprecated. This reduces the required API to hook your ORM with devise.
   * Use metal for failure app.
   * HTML e-mails now have proper formatting.
-  * Do not remove options from Datamapper and MongoMapper in find
+  * Allow to give :skip and :controllers in routes.
+  * Move trackable logic to the model.
+  * E-mails now use any template available in the filesystem. Easy to create multipart e-mails.
+  * E-mails asks headers_for in the model to set the proper headers.
+  * Allow to specify haml in devise_views.
+  * Compatibility with Datamapper and Mongoid.
+  * Make config.devise available on config/application.rb.
+  * TokenAuthenticatable now works with HTTP Basic Auth.
+  * Allow :unlock_strategy to be :none and add :lock_strategy which can be :failed_attempts or none. Setting those values to :none means that you want to handle lock and unlocking by yourself.
+  * No need to append ?unauthenticated=true in URLs anymore since Flash was moved to a middleware in Rails 3.
+  * :activatable is included by default in your models.
+
+* bug fix
+  * Fix a bug with STI.
+  * Do not remove options from Datamapper and MongoMapper in find.
 
 * deprecations
   * Rails 3 compatible only.
   * Scoped views are no longer "sessions/users/new". Now use "users/sessions/new".
   * Devise.orm is deprecated, just require "devise/orm/YOUR_ORM" instead.
   * Devise.default_url_options is deprecated, just modify ApplicationController.default_url_options.
+  * All messages under devise.sessions, except :signed_in and :signed_out, should be moved to devise.failure.
+  * :as and :scope in routes is deprecated. Use :path and :singular instead.
+
+== 1.0.7
+
+* bug fix
+  * Ensure password confirmation is always required
+
+* deprecations
+  * authenticatable was deprecated and renamed to database_authenticatable
+  * confirmable is not included by default on generation
+
+== 1.0.6
+
+* bug fix
+  * Do not allow unlockable strategies based on time to access a controller.
+  * Do not send unlockable email several times.
+  * Allow controller to upstram custom! failures to Warden.
+
+== 1.0.5
+
+* bug fix
+  * Use prepend_before_filter in require_no_authentication.
+  * require_no_authentication on unlockable.
+  * Fix a bug when giving an association proxy to devise.
+  * Do not use lock! on lockable since it's part of ActiveRecord API.
+
+== 1.0.4
+
+* bug fix
+  * Fixed a bug when deleting an account with rememberable
+  * Fixed a bug with custom controllers
 
 == 1.0.3
 
