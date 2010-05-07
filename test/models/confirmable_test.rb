@@ -141,6 +141,7 @@ class ConfirmableTest < ActiveSupport::TestCase
     user.save
     user.send_confirmation_instructions
     assert_not_nil user.confirmation_token
+    assert_not user.confirmation_token_changed?
   end
 
   test 'should not resend email instructions if the user change his email' do
